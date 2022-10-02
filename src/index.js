@@ -14,10 +14,12 @@ import $Clipboard from 'plugin/clipboard/';
 import $Print from 'plugin/print/';
 import $NProgress from 'plugin/nprogress/';
 import $ImagePreview from 'packages/core/components/image-preview/';
+import $ImageCropper from 'packages/core/components/image-cropper/';
 import $DialogForm from 'packages/core/components/dialog-form/';
 
 let prototypes = {
   $ImagePreview,
+  $ImageCropper,
   $DialogForm,
   $Export,
   $Print,
@@ -50,6 +52,8 @@ const install = function (Vue, opts = {}) {
     size: opts.size || 'small',
     calcHeight: opts.calcHeight || 0,
     menuType: opts.menuType || 'text',
+    modalAppendToBody: vaildData(opts.modalAppendToBody, true),
+    appendToBody: vaildData(opts.appendToBody, true),
     canvas: Object.assign({
       text: 'avuejs.com',
       fontFamily: 'microsoft yahei',
@@ -91,6 +95,7 @@ const install = function (Vue, opts = {}) {
   locale.i18n(opts.i18n);
   Vue.prototype.$axios = opts.axios || window.axios || axios;
   window.axios = Vue.prototype.$axios;
+  window.Vue = Vue;
   Vue.prototype.$uploadFun = function (column = {}, safe) {
     safe = safe || this;
     let list = ['uploadPreview', 'uploadBefore', 'uploadAfter', 'uploadDelete', 'uploadError', 'uploadExceed'];
@@ -114,10 +119,8 @@ if (typeof window !== 'undefined' && window.Vue) {
   install(window.Vue);
 }
 
-const Avue = Object.assign({
-  version: version,
-  locale: locale.locale,
+export default {
+  version,
+  locale,
   install
-}, components);
-
-export default Avue;
+}

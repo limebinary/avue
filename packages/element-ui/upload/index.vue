@@ -30,7 +30,8 @@
         <template v-else>
           <component v-if="imgUrl"
                      :src="imgUrl"
-                     :is="getIsVideo"
+                     controls="controls"
+                     :is="isMediaType(imgUrl)"
                      @mouseover="menu=true"
                      :class="b('avatar')"></component>
           <i v-else
@@ -62,12 +63,54 @@
                    type="primary">{{t('upload.upload')}}</el-button>
       </template>
       <div slot="tip"
-           class="el-upload__tip">{{tip}}</div>
-      <template v-if="$scopedSlots.default"
-                slot="file"
-                slot-scope="scope">
-        <slot v-bind="scope"></slot>
+           class="el-upload__tip"
+           v-html="tip"></div>
+      <template slot="file"
+                slot-scope="{file}">
+        <slot :file="file"
+              v-if="$scopedSlots.default">
+        </slot>
+        <span v-else-if="listType==='picture-card'">
+          <component class="el-upload-list__item-thumbnail"
+                     :src="file.url"
+                     controls="controls"
+                     :is="file.type"></component>
+          <span class="el-upload-list__item-actions">
+            <span class="el-upload-list__item-preview">
+              <i class="el-icon-zoom-in"
+                 @click.stop="handlePreview(file)"></i>
+            </span>
+            <span class="el-upload-list__item-delete">
+              <i class="el-icon-delete"
+                 v-if="!disabled"
+                 @click.stop="handleRemove(file)"></i>
+            </span>
+          </span>
+        </span>
+        <span v-else-if="listType==='picture'"
+              @click.stop="handlePreview(file)">
+          <component class="el-upload-list__item-thumbnail"
+                     :src="file.url"
+                     :is="file.type"></component>
+          <a class="el-upload-list__item-name">
+            <i class="el-icon-document"></i>
+            {{file.name}}
+          </a>
+          <i class="el-icon-close"
+             @click.stop="handleRemove(file)"></i>
+        </span>
+        <span v-else
+              @click.stop="handlePreview(file)">
+          <a class="el-upload-list__item-name">
+            <i class="el-icon-document"></i>
+            {{file.name}}
+          </a>
+          <i class="el-icon-close"
+             v-if="!disabled"
+             @click.stop="handleRemove(file)"></i>
+        </span>
       </template>
+
     </el-upload>
   </div>
 </template>
@@ -77,12 +120,11 @@ import create from "core/create";
 import props from "common/common/props.js";
 import event from "common/common/event.js";
 import locale from "core/locale";
-import { getAsVal } from "utils/util";
-import { detailImg } from "plugin/canvas/";
+import { getAsVal, isMediaType } from "utils/util";
+import { detailImg, fileToBase64 } from "plugin/canvas/";
 import { getToken } from "plugin/qiniu/";
 import { getClient } from "plugin/ali/";
 import packages from "core/packages";
-import { typeList } from 'global/variable'
 function getFileUrl (home, uri = '') {
   return uri.match(/(^http:\/\/|^https:\/\/|^\/\/|data:image\/)/) ? uri : home + uri
 };
@@ -93,7 +135,6 @@ export default create({
     return {
       res: '',
       loading: false,
-      text: [],
       file: {},
       menu: false,
       reload: Math.random()
@@ -106,10 +147,12 @@ export default create({
         return {}
       }
     },
-    onRemove: Function,
     showFileList: {
       type: Boolean,
       default: true
+    },
+    fileType: {
+      type: String,
     },
     oss: {
       type: String
@@ -134,6 +177,12 @@ export default create({
         return {};
       }
     },
+    cropperOption: {
+      type: Object,
+      default: () => {
+        return {};
+      }
+    },
     fileSize: {
       type: Number
     },
@@ -147,7 +196,7 @@ export default create({
     },
     loadText: {
       type: String,
-      default: "文件上传中,请稍等"
+      default: "Loading..."
     },
     action: {
       type: String,
@@ -173,12 +222,6 @@ export default create({
     },
     homeUrl () {
       return this.propsHttp.home || ''
-    },
-    getIsVideo () {
-      if (typeList.video.test(this.imgUrl)) {
-        return 'video'
-      }
-      return 'img'
     },
     fileName () {
       return this.propsHttp.fileName || 'file'
@@ -208,12 +251,13 @@ export default create({
             let i = ele.lastIndexOf('/');
             name = ele.substring(i + 1);
           }
+          let url = getFileUrl(this.homeUrl, this.isMultiple ? ele : ele[this.valueKey]);
           list.push({
             uid: index + '',
             status: 'done',
-            isImage: ele.isImage,
+            type: this.isMediaType(url),
             name: this.isMultiple ? name : ele[this.labelKey],
-            url: getFileUrl(this.homeUrl, this.isMultiple ? ele : ele[this.valueKey])
+            url: url
           });
         }
       });
@@ -226,6 +270,9 @@ export default create({
     }
   },
   methods: {
+    isMediaType (url) {
+      return isMediaType(url, this.fileType)
+    },
     setSort () {
       if (!window.Sortable) {
         packages.logs('Sortable');
@@ -237,6 +284,7 @@ export default create({
         onEnd: evt => {
           const targetRow = this.text.splice(evt.oldIndex, 1)[0];
           this.text.splice(evt.newIndex, 0, targetRow)
+
           this.reload = Math.random();
           this.$nextTick(() => this.setSort())
         }
@@ -255,8 +303,9 @@ export default create({
       }
     },
     handleRemove (file, fileList) {
-      this.onRemove && this.onRemove(file, fileList);
-      this.delete(file);
+      this.beforeRemove(file).then(() => {
+        this.delete(file);
+      })
     },
     handleError (error) {
       this.uploadError && this.uploadError(error, this.column)
@@ -270,11 +319,13 @@ export default create({
     },
     show (data) {
       this.loading = false;
-      this.handleSuccess(data || this.res);
+      this.res = data || this.res
+      this.handleSuccess(this.res);
     },
     hide (msg) {
       this.loading = false;
-      this.handleError(msg);
+      if (msg) this.handleError(msg);
+
     },
     handleFileChange (file, fileList) {
       fileList.splice(fileList.length - 1, 1);
@@ -285,9 +336,8 @@ export default create({
         return
       }
       this.loading = true;
-      let file = config.file;
-      const fileSize = file.size / 1024;
       this.file = config.file;
+      const fileSize = this.file.size / 1024;
       if (!this.validatenull(fileSize) && fileSize > this.fileSize) {
         this.hide("文件太大不符合");
         return;
@@ -300,11 +350,9 @@ export default create({
       const done = () => {
         const callback = (newFile) => {
           let url = this.action;
-          for (let o in this.data) {
-            param.append(o, this.data[o]);
-          }
-          const uploadfile = newFile || file;
-          param.append(this.fileName, uploadfile);
+          this.file = newFile || this.file
+          for (let o in this.data) param.append(o, this.data[o]);
+          param.append(this.fileName, this.file);
           //七牛云oss存储
           if (this.isQiniuOss) {
             if (!window.CryptoJS) {
@@ -328,6 +376,7 @@ export default create({
             oss_config = this.$AVUE.ali;
             client = getClient(oss_config);
           }
+
           (() => {
             if (this.isAliOss) {
               return client.put(uploadfile.name, uploadfile, {
@@ -336,52 +385,56 @@ export default create({
             } else {
               return this.$axios.post(url, param, { headers });
             }
-          })()
-            .then(res => {
-              this.res = {};
-              if (this.isQiniuOss) {
-                res.data.key = oss_config.url + res.data.key;
-              }
-
-              if (this.isAliOss) {
-                this.res = getAsVal(res, this.resKey);
-              } else {
-                this.res = getAsVal(res.data, this.resKey);
-              }
-
-              if (typeof this.uploadAfter === "function")
-                this.uploadAfter(
-                  this.res,
-                  this.show,
-                  () => {
-                    this.loading = false;
-                  },
-                  this.column
-                );
-              else this.show(this.res);
-            })
-            .catch(error => {
-              if (typeof this.uploadAfter === "function")
-                this.uploadAfter(error, this.hide, () => {
-                  this.loading = false;
-                }, this.column);
-              else this.hide(error);
-            });
+          })().then(res => {
+            this.res = {};
+            if (this.isQiniuOss) {
+              res.data.key = oss_config.url + res.data.key;
+            }
+            this.res = getAsVal(this.isAliOss ? res : res.data, this.resKey);
+            if (typeof this.uploadAfter === "function") {
+              this.uploadAfter(this.res, this.show, this.hide, this.column);
+            } else {
+              this.show();
+            }
+          }).catch(error => {
+            this.hide(error);
+          });
         };
-        if (typeof this.uploadBefore === "function")
-          this.uploadBefore(this.file, callback, () => {
-            this.loading = false;
-          }, this.column);
-        else callback();
+        if (typeof this.uploadBefore === "function") {
+          this.uploadBefore(this.file, callback, this.hide, this.column);
+        } else {
+          callback();
+        }
       };
-      //是否开启水印
-      if (!this.validatenull(this.canvasOption)) {
-        detailImg(file, this.canvasOption).then(res => {
-          file = res;
-          done();
-        });
+      //处理水印图片
+      const canvasDone = () => {
+        if (!this.validatenull(this.canvasOption)) {
+          detailImg(this.file, this.canvasOption, file => {
+            this.file = file;
+            done();
+          });
+        } else {
+          done()
+        }
+      }
+      //处理图片剪裁
+      if (!this.validatenull(this.cropperOption)) {
+        fileToBase64(this.file, (res) => {
+          let option = Object.assign(this.cropperOption, {
+            img: res,
+            type: 'file',
+            callback: res => {
+              this.file = res;
+              canvasDone()
+            },
+            cancel: () => {
+              this.loading = false
+            }
+          })
+          this.$ImageCropper(option)
+        })
       } else {
-        done();
+        canvasDone()
       }
     },
     handleExceed (files, fileList) {
@@ -404,8 +457,7 @@ export default create({
       this.beforeRemove(file).then(() => {
         this.text = [];
         this.menu = false;
-      }).catch(() => {
-      });
+      })
     },
     beforeRemove (file) {
       if (typeof this.uploadDelete === "function") {

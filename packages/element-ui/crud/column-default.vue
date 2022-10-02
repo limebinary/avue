@@ -52,6 +52,9 @@ export default create({
   },
   mixins: [locale],
   inject: ["crud"],
+  mounted () {
+    this.setSort()
+  },
   methods: {
     indexMethod (index) {
       return (
@@ -79,8 +82,12 @@ export default create({
     },
     columnDrop () {
       let el = this.crud.$refs.table.$el.querySelector(this.config.dropColClass);
+      let noIndexCount = 0;
+      ['selection', 'index', 'expand'].forEach(ele => {
+        if (this.crud.tableOption[ele]) { noIndexCount += 1 }
+      })
       this.crud.tableDrop('column', el, evt => {
-        this.crud.headerSort(evt.oldIndex, evt.newIndex)
+        this.crud.headerSort(evt.oldIndex - noIndexCount, evt.newIndex - noIndexCount)
         this.columnDrop()
       })
     },
