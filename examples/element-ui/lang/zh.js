@@ -1,4 +1,4 @@
-export default {
+const zh = {
   common: {
     condition: '条件',
     display: '显示',
@@ -8,20 +8,13 @@ export default {
     select: '请选择',
     input: '请输入'
   },
-  check: {
-    checkAll: '全选'
-  },
   upload: {
     upload: '点击上传',
     tip: '将文件拖到此处，或'
   },
-  time: {
-    start: '开始',
-    end: '结束'
-  },
   date: {
-    start: '开始',
-    end: '结束',
+    start: '开始日期',
+    end: '结束日期',
     t: '今日',
     y: '昨日',
     n: '近7天',
@@ -77,4 +70,4 @@ export default {
     copyBtn: '复 制',
     delBtn: '删 除'
   }
-}
+};

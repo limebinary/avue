@@ -1,4 +1,4 @@
-export default {
+const en = {
   common: {
     condition: 'condition',
     display: 'display',
@@ -8,20 +8,13 @@ export default {
     select: 'Please select',
     input: 'Please input'
   },
-  check: {
-    checkAll: 'checkAll'
-  },
   upload: {
     upload: 'upload',
     tip: 'Drag files here，/'
   },
-  time: {
-    start: 'start',
-    end: 'end',
-  },
   date: {
-    start: 'start',
-    end: 'end',
+    start: 'Start date',
+    end: 'End date',
     t: 'today',
     y: 'yesterday',
     n: 'nearly 7',
@@ -77,4 +70,4 @@ export default {
     copyBtn: 'copy',
     delBtn: 'delete'
   }
-}
+};

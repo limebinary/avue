@@ -8,8 +8,9 @@
         <el-button slot="append"
                    :size="size"
                    @click="parentAdd"
+                   v-permission="getPermission('addBtn')"
                    icon="el-icon-plus"
-                   v-if="vaildData(option.addBtn,true)&&!$slots.addBtn"></el-button>
+                   v-if="vaildData(option.addBtn,true)"></el-button>
         <slot v-else
               name="addBtn"
               slot="append"></slot>
@@ -26,7 +27,7 @@
                :highlight-current="!multiple"
                :show-checkbox="multiple"
                :accordion="accordion"
-               :node-key="props.value"
+               :node-key="valueKey"
                :check-strictly="checkStrictly"
                :check-on-click-node="checkOnClickNode"
                :filter-node-method="filterNode"
@@ -59,32 +60,33 @@
       <div :class="b('item')"
            v-if="vaildData(option.addBtn,true)"
            v-permission="getPermission('addBtn')"
-           @click="rowAdd">新增</div>
+           @click="rowAdd">{{menuIcon('addBtn')}}</div>
       <div :class="b('item')"
            v-if="vaildData(option.editBtn,true)"
            v-permission="getPermission('editBtn')"
-           @click="rowEdit">修改</div>
+           @click="rowEdit">{{menuIcon('editBtn')}}</div>
       <div :class="b('item')"
            v-if="vaildData(option.delBtn,true)"
            v-permission="getPermission('delBtn')"
-           @click="rowRemove">删除</div>
+           @click="rowRemove">{{menuIcon('delBtn')}}</div>
       <slot name="menu"
             :node="node"></slot>
     </div>
-    <el-dialog :title="node[labelKey] || title"
-               :visible.sync="box"
-               :class="b('dialog')"
-               class="avue-dialog"
-               modal-append-to-body
-               append-to-body
-               @close="hide"
-               :width="vaildData(option.dialogWidth,'50%')">
-      <avue-form v-model="form"
-                 :option="formOption"
-                 ref="form"
-                 @submit="handleSubmit"></avue-form>
-    </el-dialog>
-
+    <div v-if="box">
+      <el-dialog :title="node[labelKey] || title"
+                 :visible.sync="box"
+                 :class="b('dialog')"
+                 class="avue-dialog"
+                 :modal-append-to-body="$AVUE.modalAppendToBody"
+                 :append-to-body="$AVUE.appendToBody"
+                 @close="hide"
+                 :width="vaildData(option.dialogWidth,'50%')">
+        <avue-form v-model="form"
+                   :option="formOption"
+                   ref="form"
+                   @submit="handleSubmit"></avue-form>
+      </el-dialog>
+    </div>
   </div>
 </template>
 
@@ -150,11 +152,18 @@ export default create({
       box: false,
       type: "",
       node: {},
-      obj: {},
-      form: {},
     };
   },
   computed: {
+    form: {
+      get () {
+        return this.value
+      },
+      set (val) {
+        this.$emit('input', val);
+        this.$emit('change', val)
+      }
+    },
     styleName () {
       return {
         top: this.setPx(this.client.y - 10),
@@ -188,7 +197,7 @@ export default create({
       return this.option.lazy
     },
     addText () {
-      return this.addFlag ? this.t("crud.addBtn") : this.t("crud.editBtn");
+      return this.addFlag ? this.menuIcon('addBtn') : this.menuIcon('updateBtn');
     },
     addFlag () {
       return ["add", "parentAdd"].includes(this.type);
@@ -220,26 +229,12 @@ export default create({
     defaultExpandedKeys () {
       return this.option.defaultExpandedKeys;
     },
-    formColumnOption () {
-      return (this.option.formOption || {}).column || [];
-    },
     formOption () {
       return Object.assign(
+        this.option.formOption || {},
         {
           submitText: this.addText,
-          column: [{
-            label: this.valueKey,
-            prop: this.valueKey,
-            display: false
-          },
-          ...this.formColumnOption
-          ]
-        },
-        (() => {
-          let option = this.option.formOption || {};
-          delete option.column;
-          return option;
-        })()
+        }
       );
     }
   },
@@ -252,15 +247,12 @@ export default create({
   watch: {
     filterValue (val) {
       this.$refs.tree.filter(val);
-    },
-    value (val) {
-      this.form = val;
-    },
-    form (val) {
-      this.$emit("input", val);
     }
   },
   methods: {
+    menuIcon (value) {
+      return this.vaildData(this.option[value + 'Text'], this.t("crud." + value))
+    },
     getPermission (key) {
       if (typeof this.permission === "function") {
         return this.permission(key, this.node)
