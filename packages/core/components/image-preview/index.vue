@@ -32,24 +32,25 @@
         <el-carousel-item @click.native.self="ops.closeOnClickModal?close():''"
                           v-for="(item,indexs) in datas"
                           :key="indexs">
-          <div v-if="item.isImage==false"
+          <component @click="handleClick(item,indexs)"
+                     :id="'avue-image-preview__'+indexs"
+                     :src="item.url"
+                     :style="[styleName,styleBoxName]"
+                     ref="item"
+                     @mousedown="move"
+                     controls="controls"
+                     :is="isMediaType(item)"
+                     v-if="isMediaType(item)"
+                     ondragstart="return false"></component>
+          <div v-else
+               @click="handleClick(item,indexs,true)"
                :id="'avue-image-preview__'+indexs"
                :class="b('file')">
-            <a :href="item.url"
-               target="_blank">
+            <span>
               <i class="el-icon-document"></i>
               <p>{{item.name}}</p>
-            </a>
+            </span>
           </div>
-          <img v-else
-               :id="'avue-image-preview__'+indexs"
-               :src="item.url"
-               :style="[styleName,styleBoxName]"
-               ref="item"
-               @mousedown="move"
-               controls="controls"
-               :is="getIsVideo(item)"
-               ondragstart="return false"></img>
         </el-carousel-item>
       </el-carousel>
     </div>
@@ -72,8 +73,8 @@
   </div>
 </template>
 <script>
+import { isMediaType } from "utils/util";
 import create from "core/create";
-import { typeList } from 'global/variable'
 export default create({
   name: "image-preview",
   data () {
@@ -133,15 +134,10 @@ export default create({
         ele.pause && ele.pause()
       })
     },
-    isMedia (item) {
-      return typeList.img.test(item.url) || typeList.video.test(item.url)
-    },
-    getIsVideo (item) {
-      if (typeList.video.test(item.url)) {
-        return 'video'
-      } else if (typeList.img.test(item.url)) {
-        return 'img'
-      }
+    isMediaType (item) {
+      let url = item.url
+      let type = item.type
+      return isMediaType(item.url, item.type)
     },
     subScale () {
       if (this.scale != 0.2) {
@@ -174,6 +170,13 @@ export default create({
         document.onmousemove = null;
         document.onmouseup = null;
       };
+    },
+    handleClick (item, index, df = false) {
+      if (typeof this.ops.click == "function") {
+        this.ops.click(item, index);
+      } else if (df) {
+        window.open(item.url)
+      }
     },
     close () {
       this.isShow = false
