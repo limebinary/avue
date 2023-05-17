@@ -2,7 +2,7 @@ import components from './ui/index'
 import { version } from './version';
 import axios from 'axios'
 import { validatenull } from 'utils/validate.js';
-import { randomId, deepClone, dataURLtoFile, findObject, vaildData, findArray, setPx, sortArrys, isJson, downFile, loadScript } from 'utils/util';
+import { randomId, deepClone, dataURLtoFile, findObject, vaildData, findArray, findNode, setPx, isJson, downFile, loadScript } from 'utils/util';
 import dialogDrag from 'packages/core/directive/dialog-drag';
 import contextmenu from 'packages/core/directive/contextmenu';
 import $Export from 'plugin/export/';
@@ -32,8 +32,8 @@ let prototypes = {
   isJson,
   setPx,
   vaildData,
-  sortArrys,
   findArray,
+  findNode,
   validatenull,
   downFile,
   loadScript,
@@ -82,7 +82,8 @@ const install = function (Vue, opts = {}) {
     }, (opts.ali || {}))
   }
   Vue.prototype.$AVUE = Object.assign(opts, defaultOption);
-  components.forEach(component => {
+  Object.keys(components).forEach(ele => {
+    const component = components[ele];
     Vue.component(component.name, component);
   });
   Object.keys(prototypes).forEach((key) => {
@@ -120,7 +121,10 @@ if (typeof window !== 'undefined' && window.Vue) {
 }
 
 export default {
-  version,
-  locale,
-  install
+  ...{
+    version,
+    locale,
+    install
+  },
+  ...components
 }

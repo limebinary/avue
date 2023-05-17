@@ -34,10 +34,12 @@ export default function () {
       },
       propOption: {
         handler (list) {
-          this.objectOption = {};
+          let result = {}
           list.forEach(ele => {
-            this.$set(this.objectOption, ele.prop, ele)
+            result[ele.prop] = ele
+
           });
+          this.$set(this, 'objectOption', result)
         },
         deep: true,
       },
@@ -62,9 +64,12 @@ export default function () {
     },
     computed: {
       resultOption () {
-        return Object.assign(this.deepClone(this.tableOption), {
-          column: this.propOption
-        })
+        return {
+          ...this.tableOption,
+          ...{
+            column: this.propOption
+          }
+        }
       },
       rowKey () {
         return this.tableOption.rowKey || DIC_PROPS.rowKey;
@@ -99,7 +104,7 @@ export default function () {
         }
       },
       getIsMobile () {
-        this.isMobile = window.document.body.clientWidth <= 768;
+        this.isMobile = document.body.clientWidth <= 768;
       },
       updateDic (prop, list) {
         let column = this.findObject(this.propOption, prop);
@@ -115,22 +120,17 @@ export default function () {
           this.$set(this.DIC, prop, list);
         }
       },
-      handleSetDic (list, res = {}) {
-        Object.keys(res).forEach(ele => {
-          this.$set(list, ele, res[ele])
-        });
-      },
       //本地字典
       handleLocalDic () {
-        this.handleSetDic(this.DIC, loadLocalDic(this.resultOption));
+        loadLocalDic(this.resultOption, this)
       },
       // 网络字典加载
       handleLoadDic () {
-        loadDic(this.resultOption).then(res => this.handleSetDic(this.DIC, res))
+        loadDic(this.resultOption, this)
       },
       //级联字典加载
       handleLoadCascaderDic () {
-        loadCascaderDic(this.propOption, this.data).then(res => this.handleSetDic(this.cascaderDIC, res));
+        loadCascaderDic(this.propOption, this)
       }
     }
   };

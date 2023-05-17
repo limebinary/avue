@@ -1,6 +1,8 @@
 <template>
   <div :class="b()">
-    <el-input :placeholder="placeholder"
+    <el-input :prefix-icon="prefixIcon"
+              :suffix-icon="suffixIcon"
+              :placeholder="placeholder"
               v-model="text"
               :size="size"
               ref="main"
@@ -12,7 +14,7 @@
                  @click="handleShow"
                  :text="text"
                  :size="28"
-                 small></icon-temp>
+                 :small="size=='mini'"></icon-temp>
 
     </el-input>
     <div v-if="box">
@@ -21,7 +23,12 @@
                  :modal-append-to-body="$AVUE.modalAppendToBody"
                  :append-to-body="$AVUE.appendToBody"
                  :visible.sync="box"
-                 :width="dialogWidth">
+                 :width="setPx(dialogWidth)">
+        <div :class="b('filter')">
+          <el-input :placeholder="vaildData(option.filterText,t('tip.input'))"
+                    :size="size"
+                    v-model="filterText"></el-input>
+        </div>
         <avue-tabs :option="option"
                    @change="handleTabs"></avue-tabs>
         <div :class="b('list')">
@@ -29,7 +36,8 @@
                v-for="(item,index) in list"
                @click="handleSubmit(item.value)"
                :key="index">
-            <icon-temp :text="item.value"></icon-temp>
+            <icon-temp :text="item.value"
+                       :small="size=='mini'"></icon-temp>
             <p>{{item.label || item.value}}</p>
           </div>
         </div>
@@ -40,6 +48,7 @@
 
 <script>
 import create from "core/create";
+import locale from "core/locale";
 import iconTemp from 'common/components/icon/index';
 import props from "common/common/props.js";
 import event from "common/common/event.js";
@@ -48,8 +57,14 @@ export default create({
   components: {
     iconTemp
   },
-  mixins: [props(), event()],
+  mixins: [props(), event(), locale],
   props: {
+    prefixIcon: {
+      type: String
+    },
+    suffixIcon: {
+      type: String
+    },
     dialogWidth: {
       type: String,
       default: '80%'
@@ -63,20 +78,25 @@ export default create({
   },
   data () {
     return {
+      filterText: '',
       box: false,
       tabs: {}
     };
   },
   computed: {
     list () {
-      let list = (this.tabs.list || []).map(ele => {
+      let list = this.tabs.list.map(ele => {
         if (!ele.value && !ele.label) {
           return {
+            label: ele,
             value: ele
           }
         }
         return ele
       });
+      if (this.filterText) {
+        list = list.filter(ele => ele.label.indexOf(this.filterText) !== -1)
+      }
       return list
     },
     option () {
@@ -86,7 +106,7 @@ export default create({
     }
   },
   created () {
-    this.tabs = this.iconList[0] || {};
+    this.tabs = this.iconList[0]
   },
   methods: {
     handleTabs (tabs) {
@@ -100,6 +120,7 @@ export default create({
     handleShow () {
       this.$refs.main.blur();
       if (this.disabled || this.readonly) return;
+      this.tabs = this.iconList[0]
       this.box = true;
     }
   }

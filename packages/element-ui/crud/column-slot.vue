@@ -3,17 +3,21 @@
                    :key="column.prop"
                    :prop="column.prop"
                    :label="column.label"
+                   :class-name="column.className"
+                   :label-class-name="column.labelClassName"
                    :column-key="column.prop"
                    filter-placement="bottom-end"
                    :filters="getColumnProp(column,'filters')"
-                   :filter-method="getColumnProp(column,'filterMethod')?handleFiltersMethod:undefined"
+                   :filter-method="getColumnProp(column,'filterMethod')?handleFilterMethod:undefined"
                    :filter-multiple="vaildData(column.filterMultiple,true)"
-                   :show-overflow-tooltip="column.overHidden"
+                   :show-overflow-tooltip="column.showOverflowTooltip || column.overHidden"
+                   :tooltip-effect="column.tooltipEffect"
                    :min-width="column.minWidth"
                    :sortable="getColumnProp(column,'sortable')"
                    :sort-method="column.sortMethod"
                    :sort-orders="column.sortOrders"
                    :sort-by="column.sortBy"
+                   :resizable="column.resizable"
                    :render-header="column.renderHeader"
                    :align="column.align || crud.tableOption.align"
                    :header-align="column.headerAlign || crud.tableOption.headerAlign"
@@ -76,17 +80,22 @@
             :name="column.prop"
             v-else-if="crud.$scopedSlots[column.prop]"></slot>
       <template v-else>
-        <span v-if="['img','upload'].includes(column.type)">
-          <div class="avue-crud__img">
-            <component v-for="(item,index) in getImgList(row,column)"
-                       :src="item"
-                       controls="controls"
+        <span v-if="['img','upload'].includes(column.type)"
+              class="avue-crud__img ">
+          <template v-for="(item,index) in getImgList(row,column)">
+            <component :src="item"
+                       v-if="isMediaType(item,column.fileType)"
                        :is="isMediaType(item,column.fileType)"
                        :key="index"
                        @click.stop="openImg(row,column,index)"></component>
-          </div>
+            <i v-else
+               :key="index"
+               :src="item"
+               @click.stop="openImg(row,column,index)"
+               class="el-icon-document"></i>
+          </template>
         </span>
-        <span v-else-if="'url' ===column.type">
+        <span v-else-if="'url'===column.type">
           <el-link v-for="(item,index) in corArray(row,column)"
                    type="primary"
                    :key="index"
@@ -133,7 +142,7 @@ export default {
   created () {
     const list = [
       'getColumnProp',
-      "handleFiltersMethod",
+      "handleFilterMethod",
       "handleFilters"
     ];
     Object.keys(this.dynamic).forEach(ele => {
@@ -180,7 +189,7 @@ export default {
           if (this.validatenull(this.crud.cascaderDIC[rowIndex])) {
             this.$set(this.crud.cascaderDIC, rowIndex, {});
           }
-          if (this.crud.formIndexList.includes(rowIndex)) {
+          if (this.crud.cascaderIndexList.includes(rowIndex)) {
             //清空子类字典
             cascader.forEach(ele => {
               this.$set(this.crud.cascaderDIC[rowIndex], ele.prop, []);
@@ -200,22 +209,28 @@ export default {
             value: value,
             form: row
           }).then(res => {
-            //首次加载的放入队列记录
-            if (!this.crud.formIndexList.includes(rowIndex)) this.crud.formIndexList.push(rowIndex);
             const dic = res || [];
+            //首次加载的放入队列记录
+            if (!this.crud.cascaderIndexList.includes(rowIndex)) {
+              this.crud.cascaderIndexList.push(rowIndex);
+            }
+            if (!this.crud.cascaderDicList[rowIndex]) {
+              this.$set(this.crud.cascaderDicList, rowIndex, {})
+            }
+            if (!this.crud.cascaderDicList[rowIndex][columnNextProp]) {
+              this.$set(this.crud.cascaderDicList[rowIndex], columnNextProp, dic)
+            }
             // 修改字典
             this.$set(this.crud.cascaderDIC[rowIndex], columnNextProp, dic);
-
             if (!this.validatenull(dic[columnNext.cascaderIndex]) && !this.validatenull(dic) && !this.validatenull(columnNext.cascaderIndex)) {
               row[columnNextProp] = dic[columnNext.cascaderIndex][(columnNext.props || {}).value || DIC_PROPS.value]
             }
-          }
-          );
+          });
         })
       })
     },
     handleDetail (row, column) {
-      let result = row[column.prop];
+      let result;
       let DIC = column.parentProp ? (this.crud.cascaderDIC[row.$index] || {})[column.prop] : this.crud.DIC[column.prop]
       result = detail(row, column, this.crud.tableOption, DIC);
       if (!this.validatenull(DIC) && this.crud.tableOption.filterDic !== true) {
@@ -224,14 +239,16 @@ export default {
       return result;
     },
     corArray (row, column) {
-      const list = this.handleDetail(row, column);
-      if (Array.isArray(list)) return list
-      return list.split(DIC_SHOW_SPLIT)
+      let list = this.handleDetail(row, column);
+      if (!Array.isArray(list)) {
+        list = this.validatenull(list) ? [] : list.split(DIC_SHOW_SPLIT);
+      }
+      return this.deepClone(list)
     },
     openImg (row, column, index) {
       let list = this.getImgList(row, column)
       list = list.map(ele => {
-        return { thumbUrl: ele, url: ele, type: 'img' }
+        return { thumbUrl: ele, url: ele, type: column.fileType }
       })
       this.$ImagePreview(list, index);
     },
@@ -239,9 +256,8 @@ export default {
       let url = column.propsHttp?.home || ''
       let value = column.props?.value || DIC_PROPS.value;
       let list = this.corArray(row, column);
-      if (column.listType == 'picture-img') return [url + list]
       list.forEach((ele, index) => {
-        ele = url + (ele[value] ? ele[value] : ele);
+        list[index] = url + (ele[value] ? ele[value] : ele);
       })
       return list;
     },

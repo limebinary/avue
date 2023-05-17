@@ -27,7 +27,8 @@
                      circle></el-button>
           <avue-form :key="index"
                      ref="main"
-                     :option="deepClone(option)"
+                     :option="option"
+                     v-bind="$uploadFun({},this)"
                      v-model="text[index]">
             <div slot-scope="{}"
                  slot="_index">
@@ -49,6 +50,7 @@
                ref="main"
                :option="option"
                :disabled="disabled"
+               v-bind="$uploadFun({},this)"
                @cell-mouse-enter="cellMouseenter"
                @cell-mouse-leave="cellMouseLeave"
                @selection-change="handleSelectionChange"
@@ -89,6 +91,7 @@
 import create from "core/create";
 import props from "common/common/props.js";
 import event from "common/common/event.js";
+import { getColumn } from 'utils/util'
 export default create({
   name: "dynamic",
   mixins: [props(), event()],
@@ -99,7 +102,14 @@ export default create({
     }
   },
   props: {
+    uploadBefore: Function,
+    uploadAfter: Function,
+    uploadDelete: Function,
+    uploadPreview: Function,
+    uploadError: Function,
+    uploadExceed: Function,
     max: Number,
+    boxType: String,
     columnSlot: {
       type: Array,
       default: () => {
@@ -114,6 +124,18 @@ export default create({
     }
   },
   computed: {
+    isAdd () {
+      return this.boxType === "add"
+    },
+    isEdit () {
+      return this.boxType === "edit"
+    },
+    isView () {
+      return this.boxType === "view"
+    },
+    textLen () {
+      return this.text.length;
+    },
     maxFlag () {
       if (this.max) {
         return !(this.text.length == this.max)
@@ -172,10 +194,11 @@ export default create({
       return rules;
     },
     columnOption () {
-      return this.children.column || []
+      return getColumn(this.children.column)
     },
     option () {
       return Object.assign({
+        boxType: this.boxType,
         border: true,
         header: false,
         menu: false,
@@ -202,7 +225,10 @@ export default create({
         }];
         this.columnOption.forEach(ele => {
           list.push(Object.assign(ele, {
-            cell: this.vaildData(ele.cell, true)
+            hide: this.vaildData(ele.hide, !this.vaildParams(ele, 'display', true)),
+            disabled: this.vaildParams(ele, 'disabled', false),
+            detail: this.vaildParams(ele, 'detail', false),
+            cell: this.vaildData(ele.cell, this.isCrud)
           }))
         })
         return {
@@ -215,14 +241,31 @@ export default create({
     this.initData();
   },
   watch: {
-    textLen () {
-      return this.text.length;
-    },
     text () {
       this.initData();
     }
   },
   methods: {
+    vaildParams (column, type, value) {
+      function replaceStr (str) { // 正则法
+        str = str.toLowerCase();
+        var reg = /\b(\w)|\s(\w)/g; //  \b判断边界\s判断空格
+        return str.replace(reg, function (m) {
+          return m.toUpperCase()
+        });
+      }
+      let key, caseKey = replaceStr(type);
+      if (!this.validatenull(column[type])) {
+        key = type
+      } else if (this.isAdd) {
+        key = 'add' + caseKey
+      } else if (this.isEdit) {
+        key = 'edit' + caseKey
+      } else if (this.isView) {
+        key = 'view' + caseKey
+      }
+      return this.vaildData(column[key], value)
+    },
     handleSelectionChange (val) {
       this.selectionChange && this.selectionChange(val);
     },
@@ -275,13 +318,17 @@ export default create({
     },
     addRow () {
       const callback = (obj = {}) => {
-        obj = Object.assign(this.valueOption, obj, {
-          $index: this.textLen
-        });
+        let row = this.deepClone({
+          ...this.valueOption,
+          ...obj,
+          ...{
+            $index: this.textLen
+          }
+        })
         if (this.isCrud) {
-          this.$refs.main.rowCellAdd(obj);
+          this.$refs.main.rowCellAdd(row);
         } else if (this.isForm) {
-          this.text.push(obj)
+          this.text.push(row)
         }
       }
       if (typeof this.rowAdd === 'function') {

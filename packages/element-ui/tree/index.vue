@@ -2,19 +2,19 @@
   <div :class="b()">
     <div :class="b('filter')"
          v-if="vaildData(option.filter,true)">
-      <el-input :placeholder="vaildData(option.filterText,'输入关键字进行过滤')"
+      <el-input :placeholder="vaildData(option.filterText,t('tip.input'))"
                 :size="size"
                 v-model="filterValue">
-        <el-button slot="append"
-                   :size="size"
-                   @click="parentAdd"
-                   v-permission="getPermission('addBtn')"
-                   icon="el-icon-plus"
-                   v-if="vaildData(option.addBtn,true)"></el-button>
-        <slot v-else
-              name="addBtn"
-              slot="append"></slot>
+
       </el-input>
+      <el-button v-permission="getPermission('addBtn')"
+                 :size="size"
+                 @click="parentAdd"
+                 icon="el-icon-plus"
+                 v-if="vaildData(option.addBtn,true)"></el-button>
+      <slot v-else
+            v-permission="getPermission('addBtn')"
+            name="addBtn"></slot>
     </div>
     <el-scrollbar :class="b('content')">
       <el-tree ref="tree"
@@ -51,7 +51,6 @@
         </span>
       </el-tree>
     </el-scrollbar>
-
     <div class="el-cascader-panel is-bordered"
          v-if="client.show&&menu"
          @click="client.show=false"
@@ -76,11 +75,11 @@
       <el-dialog :title="node[labelKey] || title"
                  :visible.sync="box"
                  :class="b('dialog')"
-                 class="avue-dialog"
+                 class="avue-dialog avue-dialog--none"
                  :modal-append-to-body="$AVUE.modalAppendToBody"
                  :append-to-body="$AVUE.appendToBody"
-                 @close="hide"
-                 :width="vaildData(option.dialogWidth,'50%')">
+                 :before-close="hide"
+                 :width="setPx(vaildData(option.dialogWidth,'50%'))">
         <avue-form v-model="form"
                    :option="formOption"
                    ref="form"
@@ -105,6 +104,8 @@ export default create({
     indent: Number,
     filterNodeMethod: Function,
     checkOnClickNode: Boolean,
+    beforeClose: Function,
+    beforeOpen: Function,
     permission: {
       type: [Function, Object],
       default: () => {
@@ -152,18 +153,10 @@ export default create({
       box: false,
       type: "",
       node: {},
+      form: {}
     };
   },
   computed: {
-    form: {
-      get () {
-        return this.value
-      },
-      set (val) {
-        this.$emit('input', val);
-        this.$emit('change', val)
-      }
-    },
     styleName () {
       return {
         top: this.setPx(this.client.y - 10),
@@ -179,7 +172,7 @@ export default create({
       return this.vaildData(this.option.menu, true)
     },
     title () {
-      return this.option.title
+      return this.option.title || this.t(`crud.addTitle`)
     },
     treeLoad () {
       return this.option.treeLoad
@@ -247,6 +240,13 @@ export default create({
   watch: {
     filterValue (val) {
       this.$refs.tree.filter(val);
+    },
+    value (val) {
+      this.form = val;
+    },
+    form (val) {
+      this.$emit("input", val);
+      this.$emit("change", val);
     }
   },
   methods: {
@@ -255,7 +255,7 @@ export default create({
     },
     getPermission (key) {
       if (typeof this.permission === "function") {
-        return this.permission(key, this.node)
+        return this.permission(key, this.node.data || {})
       } else if (!this.validatenull(this.permission[key])) {
         return this.permission[key]
       } else {
@@ -271,8 +271,8 @@ export default create({
         this[ele] = this.$refs.tree[ele];
       })
     },
-    nodeContextmenu (e, data) {
-      this.node = this.deepClone(data);
+    nodeContextmenu (e, data, node) {
+      this.node = node;
       this.client.x = e.clientX;
       this.client.y = e.clientY;
       this.client.show = true;
@@ -294,17 +294,24 @@ export default create({
       if (!value) return true;
       return data[this.labelKey].indexOf(value) !== -1;
     },
-    hide () {
-      this.box = false;
-      this.node = {};
-      this.$refs.form.resetForm();
-      this.$refs.form.clearValidate();
+    hide (done) {
+      const callback = () => {
+        done && done()
+        this.node = {};
+        this.form = {}
+        this.box = false;
+      }
+      if (typeof this.beforeClose === "function") {
+        this.beforeClose(callback, this.type);
+      } else {
+        callback();
+      }
     },
     save (data, done) {
-      const callback = () => {
-        let form = this.deepClone(this.form);
+      const callback = (form) => {
+        form = form || this.form;
         if (this.type === "add") {
-          this.$refs.tree.append(form, this.node[this.valueKey])
+          this.$refs.tree.append(form, this.node.data[this.valueKey])
         } else if (this.type === "parentAdd") {
           this.$refs.tree.append(form)
         }
@@ -314,9 +321,16 @@ export default create({
       this.$emit("save", this.node, data, callback, done);
     },
     update (data, done) {
-      const callback = () => {
-        let node = this.$refs.tree.getNode(this.node[this.valueKey]) || {};
-        node.data = this.deepClone(this.form)
+      const callback = (form) => {
+        form = form || this.form;
+        const rowKey = form[this.valueKey]
+        this.node.data = this.form
+        let { parentList, index } = this.findData(rowKey)
+        if (parentList) {
+          const oldRow = parentList.splice(index, 1)[0];
+          form[this.childrenKey] = oldRow[this.childrenKey]
+          parentList.splice(index, 0, form)
+        }
         this.hide();
         done()
       };
@@ -324,7 +338,7 @@ export default create({
     },
     rowEdit (a) {
       this.type = "edit";
-      this.form = this.node;
+      this.form = this.node.data;
       this.show();
     },
     parentAdd () {
@@ -336,16 +350,43 @@ export default create({
       this.show();
     },
     show () {
-      this.client.show = false;
-      this.box = true;
+      const callback = () => {
+        this.client.show = false;
+        this.box = true;
+      }
+      if (typeof this.beforeOpen === "function") {
+        this.beforeOpen(callback, this.type);
+      } else {
+        callback();
+      }
     },
     rowRemove () {
       this.client.show = false;
       const callback = () => {
-        this.$refs.tree.remove(this.node[this.valueKey])
+        this.$refs.tree.remove(this.node.data[this.valueKey])
       }
       this.$emit("del", this.node, callback);
-    }
+    },
+    findData (id) {
+      let result = {}
+      const callback = (parentList, parent) => {
+        parentList.forEach((ele, index) => {
+          if (ele[this.valueKey] == id) {
+            result = {
+              item: ele,
+              index: index,
+              parentList: parentList,
+              parent: parent
+            }
+          }
+          if (ele[this.childrenKey]) {
+            callback(ele[this.childrenKey], ele)
+          }
+        })
+      }
+      callback(this.data)
+      return result;
+    },
   }
 });
 </script>

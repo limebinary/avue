@@ -4,8 +4,7 @@
                :style="tableOption.titleStyle"
                v-if="tableOption.title">{{tableOption.title}}</component>
     <!-- 搜索组件 -->
-    <header-search :search="search"
-                   ref="headerSearch">
+    <header-search ref="headerSearch">
       <template slot="search"
                 slot-scope="scope">
         <slot name="search"
@@ -23,7 +22,8 @@
               :name="item"></slot>
       </template>
     </header-search>
-    <el-card :shadow="isCard">
+    <el-card :shadow="isCard"
+             :class="b('body')">
       <!-- 表格功能列 -->
       <header-menu ref="headerMenu"
                    v-if="vaildData(tableOption.header,true)">
@@ -47,7 +47,7 @@
         </span>
         <el-button type="text"
                    size="small"
-                   @click="selectClear"
+                   @click="clearSelection"
                    v-permission="getPermission('selectClearBtn')"
                    v-if="vaildData(tableOption.selectClearBtn,config.selectClearBtn) && tableOption.selection">{{t('crud.emptyBtn')}}</el-button>
         <slot name="tip"></slot>
@@ -59,7 +59,7 @@
                ref="cellForm">
         <el-table :key="reload"
                   :data="cellForm.list"
-                  :row-key="handleGetRowKeys"
+                  :row-key="rowKey"
                   :class="{'avue-crud--indeterminate':vaildData(tableOption.indeterminate,false)}"
                   :size="$AVUE.tableSize || controlSize"
                   :lazy="vaildData(tableOption.lazy,false)"
@@ -129,6 +129,11 @@
                     :name="item"></slot>
             </template>
             <column-menu slot="footer">
+              <template slot="menuHeader"
+                        slot-scope="scope">
+                <slot name="menuHeader"
+                      v-bind="scope"></slot>
+              </template>
               <template slot="menu"
                         slot-scope="scope">
                 <slot name="menu"
@@ -146,8 +151,7 @@
       <slot name="footer"></slot>
     </el-card>
     <!-- 分页 -->
-    <table-page ref="tablePage"
-                :page="page">
+    <table-page ref="tablePage">
       <template slot="page">
         <slot name="page"></slot>
       </template>
@@ -191,6 +195,7 @@ import columnDefault from './column-default'
 import config from "./config.js";
 import { calcCascader, formInitVal } from "core/dataformat";
 import { DIC_PROPS } from 'global/variable';
+import { getColumn } from 'utils/util'
 export default create({
   name: "crud",
   mixins: [init(), locale,],
@@ -227,10 +232,10 @@ export default create({
       tableHeight: undefined,
       tableIndex: -1,
       tableSelect: [],
-      formIndexList: [],
       sumsList: {},
+      cascaderIndexList: [],
       cascaderDicList: {},
-      formCascaderList: {},
+      cascaderFormList: {},
       btnDisabledList: {},
       btnDisabled: false,
       default: {}
@@ -243,9 +248,6 @@ export default create({
     this.refreshTable()
   },
   computed: {
-    isHeightAuto () {
-      return this.tableOption.height == 'auto'
-    },
     isSortable () {
       return this.tableOption.sortable;
     },
@@ -291,8 +293,8 @@ export default create({
       function findProp (list = []) {
         if (!Array.isArray(list)) return
         list.forEach(ele => {
-          result.push(ele);
-          if (ele.children) findProp(ele.children);
+          if (Array.isArray(ele.children)) findProp(ele.children);
+          else result.push(ele);
         });
       }
       findProp(this.columnOption);
@@ -333,8 +335,8 @@ export default create({
       return this.tableOption || {};
     },
     columnOption () {
-      let column = this.tableOption.column || []
-      return column
+      let tableOption = this.deepClone(this.tableOption)
+      return getColumn(tableOption.column)
     },
     sumColumnList () {
       return this.tableOption.sumColumnList || [];
@@ -476,13 +478,13 @@ export default create({
     validateField (val) {
       return this.$refs.dialogForm.$refs.tableForm.validateField(val);
     },
-    handleGetRowKeys (row) {
-      const rowKey = row[this.rowKey];
-      return rowKey;
-    },
-    selectClear () {
+    clearSelection () {
       this.$emit('selection-clear', this.deepClone(this.tableSelect))
       this.$refs.table.clearSelection();
+
+    },
+    toggleAllSelection () {
+      this.$refs.table.toggleAllSelection();
     },
     toggleRowSelection (row, selected) {
       this.$refs.table.toggleRowSelection(row, selected);
@@ -495,10 +497,9 @@ export default create({
     },
     dataInit () {
       this.list = this.data;
-      //初始化序列的参数
       this.list.forEach((ele, index) => {
-        if (ele.$cellEdit && !this.formCascaderList[index]) {
-          this.formCascaderList[index] = this.deepClone(ele);
+        if (ele.$cellEdit && !this.cascaderFormList[index]) {
+          this.cascaderFormList[index] = this.deepClone(ele);
         }
         this.$set(ele, '$cellEdit', ele.$cellEdit || false);
         this.$set(ele, '$index', index);
@@ -506,7 +507,8 @@ export default create({
     },
     //拖动表头事件
     headerDragend (newWidth, oldWidth, column, event) {
-      this.objectOption[column.property].width = newWidth
+      let obj = this.objectOption[column.property];
+      if (obj) this.$set(this.objectOption[column.property], 'width', newWidth)
       this.$emit("header-dragend", newWidth, oldWidth, column, event);
     },
     headerSort (oldIndex, newIndex) {
@@ -602,14 +604,6 @@ export default create({
     cellDblclick (row, column, cell, event) {
       this.$emit("cell-dblclick", row, column, cell, event);
     },
-    //行编辑点击
-    rowCell (row, index) {
-      if (row.$cellEdit) {
-        this.rowCellUpdate(row, index);
-      } else {
-        this.rowCellEdit(row, index);
-      }
-    },
     //单元格新增
     rowCellAdd (row = {}) {
       let len = this.list.length
@@ -624,33 +618,60 @@ export default create({
           row
         ))
       this.list.push(row);
-      this.formIndexList.push(len);
     },
     //行取消
     rowCancel (row, index) {
       if (this.validatenull(row[this.rowKey])) {
         this.list.splice(index, 1);
-        return;
+        delete this.cascaderDIC[index]
+      } else {
+        this.cascaderFormList[index].$cellEdit = false;
+        this.$set(this.cascaderDIC, index, this.cascaderDicList[index]);
+        this.$set(this.list, index, this.cascaderFormList[index]);
       }
-      this.formCascaderList[index].$cellEdit = false;
-      //设置行数据
-      this.$set(this.list, index, this.formCascaderList[index]);
-      delete this.formCascaderList[index]
-      //设置级联字典
-      this.$set(this.cascaderDIC, index, this.cascaderDicList[index]);
-      this.formIndexList.splice(this.formIndexList.indexOf(index), 1);
+      delete this.cascaderDicList[index]
+      delete this.cascaderFormList[index]
+      this.cascaderIndexList.splice(this.cascaderIndexList.indexOf(index), 1);
+    },
+    //行编辑点击
+    rowCell (row, index) {
+      if (row.$cellEdit) {
+        this.rowCellUpdate(row, index);
+      } else {
+        this.rowCellEdit(row, index);
+      }
+    },
+    rowCellUpdate (row, index) {
+      row = this.deepClone(row);
+      var result = this.validateCellField(index)
+      const done = () => {
+        this.btnDisabledList[index] = false;
+        this.btnDisabled = false;
+        this.list[index].$cellEdit = false
+        this.cascaderIndexList.splice(this.cascaderIndexList.indexOf(index), 1);
+        delete this.cascaderFormList[index]
+      }
+      const loading = () => {
+        this.btnDisabledList[index] = false;
+        this.btnDisabled = false;
+      }
+      if (result) {
+        this.btnDisabledList[index] = true;
+        this.btnDisabled = true;
+        if (this.validatenull(row[this.rowKey])) {
+          this.$emit("row-save", row, done, loading);
+        } else {
+          this.$emit("row-update", row, index, done, loading);
+        }
+      }
     },
     // 单元格编辑
     rowCellEdit (row, index) {
       row.$cellEdit = true;
-      this.$set(this.list, index, row);
       //缓冲行数据
-      this.formCascaderList[index] = this.deepClone(row);
+      this.cascaderFormList[index] = this.deepClone(row);
       //缓冲级联字典
       this.cascaderDicList[index] = this.deepClone(this.cascaderDIC[index]);
-      setTimeout(() => {
-        this.formIndexList.push(index);
-      }, 1000);
     },
     // 对部分表单字段进行校验
     validateCellForm (cb) {
@@ -674,30 +695,6 @@ export default create({
       }
       return result
     },
-    rowCellUpdate (row, index) {
-      row = this.deepClone(row);
-      var result = this.validateCellField(index)
-      const done = () => {
-        this.btnDisabledList[index] = false;
-        this.btnDisabled = false;
-        row.$cellEdit = false;
-        this.$set(this.list, index, row);
-        delete this.formCascaderList[index]
-      }
-      const loading = () => {
-        this.btnDisabledList[index] = false;
-        this.btnDisabled = false;
-      }
-      if (result) {
-        this.btnDisabledList[index] = true;
-        this.btnDisabled = true;
-        if (this.validatenull(row[this.rowKey])) {
-          this.$emit("row-save", row, done, loading);
-        } else {
-          this.$emit("row-update", row, index, done, loading);
-        }
-      }
-    },
     rowAdd () {
       this.$refs.dialogForm.show("add");
     },
@@ -713,11 +710,15 @@ export default create({
     getPropRef (prop) {
       return this.$refs.dialogForm.$refs.tableForm.getPropRef(prop);
     },
+    setVal () {
+      this.$emit("input", this.tableForm);
+      this.$emit("change", this.tableForm);
+    },
     // 编辑
     rowEdit (row, index) {
       this.tableForm = this.deepClone(row);
       this.tableIndex = index;
-      this.$emit("input", this.tableForm);
+      this.setVal()
       this.$refs.dialogForm.show("edit");
     },
     //复制
@@ -725,14 +726,14 @@ export default create({
       this.tableForm = this.deepClone(row);
       delete this.tableForm[this.rowKey]
       this.tableIndex = -1;
-      this.$emit("input", this.tableForm);
+      this.setVal()
       this.$refs.dialogForm.show("add");
     },
     //查看
     rowView (row, index) {
       this.tableForm = this.deepClone(row);
       this.tableIndex = index;
-      this.$emit("input", this.tableForm);
+      this.setVal()
       this.$refs.dialogForm.show("view");
     },
     // 删除
@@ -749,12 +750,16 @@ export default create({
     //合集统计逻辑
     tableSummaryMethod (param) {
       let sumsList = {}
-      //如果自己写逻辑则调用summaryMethod方法
-      if (typeof this.summaryMethod === "function")
-        return this.summaryMethod(param);
-      const { columns, data } = param;
       let sums = [];
-      if (columns.length > 0) {
+      const { columns, data } = param;
+      //如果自己写逻辑则调用summaryMethod方法
+      if (typeof this.summaryMethod === "function") {
+        sums = this.summaryMethod(param)
+        columns.forEach((column, index) => {
+          sumsList[column.property] = sums[index]
+        })
+        this.sumsList = sumsList;
+      } else {
         columns.forEach((column, index) => {
           let currItem = this.sumColumnList.find(item => item.name === column.property);
           if (currItem) {

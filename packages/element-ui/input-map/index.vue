@@ -1,10 +1,15 @@
 <template>
   <div :class="b()">
-    <el-input :size="size"
+    <el-input :prefix-icon="prefixIcon"
+              :suffix-icon="suffixIcon"
+              :size="size"
               @clear="handleClear"
               :clearable="clearableVal"
+              :rows="rows"
+              :autosize="{ minRows: minRows, maxRows: maxRows}"
               :disabled="disabled"
               ref="main"
+              type="textarea"
               v-model="address"
               @focus="handleShow"
               @click.native="handleClick"
@@ -12,7 +17,7 @@
     </el-input>
     <div v-if="box">
       <el-dialog class="avue-dialog avue-dialog--none"
-                 :width="dialogWidth"
+                 :width="setPx(dialogWidth)"
                  :modal-append-to-body="$AVUE.modalAppendToBody"
                  :append-to-body="$AVUE.appendToBody"
                  :title="placeholder"
@@ -42,7 +47,7 @@
                      :size="size"
                      icon="el-icon-check"
                      v-if="!(disabled || readonly)"
-                     @click="handleSubmit">确 定</el-button>
+                     @click="handleSubmit">{{t("common.submitBtn")}}</el-button>
         </span>
       </el-dialog>
     </div>
@@ -54,13 +59,28 @@ import packages from "core/packages";
 import create from "core/create";
 import props from "common/common/props.js";
 import event from "common/common/event.js";
+import locale from "core/locale";
 export default create({
   name: "input-map",
-  mixins: [props(), event()],
+  mixins: [props(), event(), locale],
   props: {
+    prefixIcon: {
+      type: String
+    },
+    suffixIcon: {
+      type: String
+    },
     dialogWidth: {
       type: String,
       default: '80%'
+    },
+    rows: Number,
+    minRows: {
+      type: Number,
+      default: 1
+    },
+    maxRows: {
+      type: Number
     },
   },
   data () {

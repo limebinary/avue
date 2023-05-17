@@ -17,7 +17,6 @@
                :picker-options="pickerOptions"
                :value-format="valueFormat"
                :placeholder="placeholder"
-               @change="handleChange"
                @click.native="handleClick"
                :disabled="disabled">
     </component>
@@ -32,15 +31,11 @@ import locale from "core/locale";
 export default create({
   name: "time",
   mixins: [props(), event(), locale],
-  data () {
-    return {};
-  },
   props: {
     editable: Boolean,
     startPlaceholder: String,
     endPlaceholder: String,
     rangeSeparator: String,
-    value: {},
     defaultValue: [String, Array],
     pickerOptions: Object,
     valueFormat: String,
@@ -50,13 +45,11 @@ export default create({
   },
   watch: {
     text () {
-      if (Array.isArray(this.text) && this.validatenull(this.text)) {
-        this.text = this.text.join(',')
+      if (this.validatenull(this.text)) {
+        this.text = null
       }
     }
   },
-  created () { },
-  mounted () { },
   computed: {
     componentName () {
       let pickerOptions = this.pickerOptions || {}

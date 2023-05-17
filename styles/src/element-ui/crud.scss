@@ -47,10 +47,11 @@ $space-width: 15px;
   &__img{
    display:flex;
    justify-content:center;
-    img,video{
-      height: 40px;
-      margin-left:5px;
+    & > *{
+      height: 50px;
+      margin-right:5px;
       object-fit: contain;
+      font-size: 50px;
     }
   }
   &__column{
@@ -59,7 +60,7 @@ $space-width: 15px;
       cursor: move;
     }
   }
-  &__menu {
+  &__header{
     display: flex;
     justify-content: space-between;
     position: relative;
@@ -70,7 +71,13 @@ $space-width: 15px;
     margin-bottom: 5px;
     background-color: #fff;
   }
+  &__menu {
+   
+  }
   &__search{
+    .el-card__body{
+      padding-bottom: 5px;
+    }
     .el-form-item--medium.el-form-item{
       margin-bottom: 22px;
     }
@@ -156,12 +163,6 @@ $space-width: 15px;
     padding:  20px 0;
     .el-empty__description{
       margin-top: 0;
-    }
-  }
-  &__header {
-    margin-bottom: 10px;
-    & > .el-button {
-      padding: 12px 25px;
     }
   }
   &__title {

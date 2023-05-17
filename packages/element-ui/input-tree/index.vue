@@ -29,6 +29,7 @@
                :node-key="valueKey"
                :accordion="accordion"
                :icon-class="iconClass"
+               :indent="indent"
                :show-checkbox="multiple"
                :expand-on-click-node="expandOnClickNode"
                :props="treeProps"
@@ -64,7 +65,6 @@ import create from "core/create";
 import props from "common/common/props.js";
 import event from "common/common/event.js";
 import { DIC_SHOW_SPLIT } from 'global/variable';
-import { detailDataType } from 'utils/util';
 export default create({
   name: "input-tree",
   mixins: [props(), event()],
@@ -77,6 +77,8 @@ export default create({
     };
   },
   props: {
+    indent: Number,
+    filterNodeMethod: Function,
     nodeClick: Function,
     treeLoad: Function,
     checked: Function,
@@ -194,6 +196,9 @@ export default create({
       this.treeLoad && this.treeLoad(node, callback)
     },
     filterNode (value, data) {
+      if (typeof this.filterNodeMethod === 'function') {
+        return this.filterNodeMethod(value, data);
+      }
       if (!value) return true;
       return data[this.labelKey].toLowerCase().indexOf(value.toLowerCase()) !== -1;
     },
@@ -212,10 +217,14 @@ export default create({
       this.$nextTick(() => {
         this.node = [];
         if (this.multiple) {
-          let list = this.$refs.tree.getCheckedNodes(this.leafOnly, false)
-          list.forEach(ele => {
-            this.node.push(ele);
-          })
+          if (this.validatenull(this.text)) {
+            this.$refs.tree.setCheckedKeys([]);
+          } else {
+            let list = this.$refs.tree.getCheckedNodes(this.leafOnly, false)
+            list.forEach(ele => {
+              this.node.push(ele);
+            })
+          }
         } else {
           let node = this.$refs.tree.getNode(this.text)
           if (node) {

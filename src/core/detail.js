@@ -1,5 +1,5 @@
 import { validatenull } from 'utils/validate';
-import { getPasswordChar, findByValue, getAsVal, strCorNum } from 'utils/util';
+import { getPasswordChar, getDicValue, getAsVal, detailDataType } from 'utils/util';
 import { DIC_SPLIT, DIC_SHOW_SPLIT, DATE_LIST, MULTIPLE_LIST, ARRAY_VALUE_LIST, ARRAY_LIST } from 'global/variable';
 import dayjs from 'dayjs';
 export const detail = (row = {}, column = {}, option = {}, dic = []) => {
@@ -8,22 +8,21 @@ export const detail = (row = {}, column = {}, option = {}, dic = []) => {
   let separator = column.separator;
   // 深结构绑定处理
   if (column.bind) result = getAsVal(row, column.bind);
-  if (validatenull(result)) {
-    result = '';
-  } else {
+  if (!validatenull(result)) {
     let selectFlag = MULTIPLE_LIST.includes(column.type) && column.multiple;
     let arrayFlag = ARRAY_VALUE_LIST.includes(column.type)
-    if ((['string', 'number'].includes(column.dataType) || selectFlag || arrayFlag) && !Array.isArray(result)) {
-      result = (result + '').split(separator || DIC_SPLIT);
-      if (column.dataType === 'number') result = strCorNum(result);
-    }
-    if (ARRAY_LIST.includes(type)) {
-      if (Array.isArray(result)) {
-        result = result.join(separator || DIC_SHOW_SPLIT);
+    if ((selectFlag || arrayFlag) && !Array.isArray(result) && !column.dataType) column.dataType = 'string'
+    if (column.dataType) {
+      if (selectFlag || arrayFlag) {
+        if (!Array.isArray(result)) result = result.split(separator || DIC_SPLIT)
+        result.forEach(ele => {
+          ele = detailDataType(ele, column.dataType)
+        })
       } else {
-        result = result.split(separator || DIC_SPLIT).join(separator || DIC_SHOW_SPLIT);
+        result = detailDataType(result, column.dataType)
       }
-    } else if ('password' === type) {
+    }
+    if ('password' === type) {
       result = getPasswordChar(result, '*');
     } else if (DATE_LIST.includes(type) && column.format) {
       const format = column.format.replace('dd', 'DD').replace('yyyy', 'YYYY');
@@ -42,12 +41,15 @@ export const detail = (row = {}, column = {}, option = {}, dic = []) => {
         result = dayjs(result).format(format);
       }
     }
-    // 字典处理
-    result = findByValue(dic, result, column.props || option.props);
   }
+  // 字典处理
+  result = getDicValue(dic, result, column.props || option.props);
   // 自定义格式化
-  if (column.formatter && typeof column.formatter === 'function') {
+  if (typeof column.formatter === 'function') {
     result = column.formatter(row, row[column.prop], result, column);
+  } else if (Array.isArray(result) && !validatenull(dic)) {
+    result = result.join(separator || DIC_SHOW_SPLIT);
   }
+
   return result;
 };

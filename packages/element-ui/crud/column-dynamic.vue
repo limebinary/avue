@@ -1,12 +1,14 @@
 
 <template>
-  <el-table-column :prop="columnOption.prop"
+  <el-table-column v-if="getColumnProp(columnOption,'hide')"
+                   :prop="columnOption.prop"
                    :key="columnOption.prop"
                    :label="columnOption.label"
+                   :class-name="columnOption.className"
+                   :label-class-name="columnOption.labelClassName"
                    filter-placement="bottom-end"
-                   v-if="getColumnProp(columnOption,'hide')"
                    :filters="getColumnProp(columnOption,'filters')"
-                   :filter-method="getColumnProp(columnOption,'filterMethod')?handleFiltersMethod:undefined"
+                   :filter-method="getColumnProp(columnOption,'filterMethod')?handleFilterMethod:undefined"
                    :filter-multiple="vaildData(columnOption.filterMultiple,true)"
                    :show-overflow-tooltip="columnOption.overHidden"
                    :min-width="columnOption.minWidth"
@@ -55,7 +57,7 @@ export default {
   created () {
     const list = [
       'getColumnProp',
-      "handleFiltersMethod",
+      "handleFilterMethod",
       "handleFilters"
     ];
     Object.keys(this.dynamic).forEach(ele => {

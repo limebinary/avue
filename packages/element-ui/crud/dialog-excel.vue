@@ -7,8 +7,10 @@
                class="avue-dialog"
                :visible.sync="box"
                :width="crud.isMobile?'100%':'30%'">
-      <avue-form v-model="form"
-                 :option="option"></avue-form>
+      <avue-form ref="form"
+                 v-model="form"
+                 :option="option">
+      </avue-form>
       <span slot="footer"
             class="dialog-footer">
         <el-button type="primary"
@@ -23,7 +25,8 @@
 
 <script>
 import locale from "core/locale";
-import { getAsVal } from "utils/util";
+import { detail } from "core/detail";
+import { uuid } from 'utils/util'
 export default {
   name: 'crud',
   mixins: [locale],
@@ -62,8 +65,8 @@ export default {
         list.forEach(ele => {
           let obj = this.deepClone(ele);
           columnOption.forEach(column => {
-            if (column.bind) obj[column.prop] = getAsVal(obj, column.bind);
-            if (!this.validatenull(obj['$' + column.prop])) obj[column.prop] = obj['$' + column.prop];
+            let DIC = column.parentProp ? (this.crud.cascaderDIC[row.$index] || {})[column.prop] : this.crud.DIC[column.prop]
+            obj[column.prop] = detail(obj, column, option, DIC);
           })
           data.push(obj);
         })
@@ -79,23 +82,24 @@ export default {
         emptyBtn: false,
         column: [
           {
-            label: '文件名',
+            label: this.t('crud.excel.name'),
             prop: 'name',
             span: 24,
           }, {
-            label: '选择数据',
+            label: this.t('crud.excel.type'),
             prop: "type",
             span: 24,
             type: 'select',
             dicData: [{
-              label: '当前数据(当前页全部的数据)',
+              label: this.t('crud.excel.typeDic.true'),
               value: true
             }, {
-              label: '选中的数据(当前页选中的数据)',
+              label: this.t('crud.excel.typeDic.false'),
+              disabled: this.crud.tableOption.selection != true,
               value: false
             }]
           }, {
-            label: '选择字段',
+            label: this.t('crud.excel.prop'),
             prop: "prop",
             type: 'tree',
             multiple: true,
@@ -106,7 +110,7 @@ export default {
             },
             dicData: this.columnOption
           }, {
-            label: '参数设置',
+            label: this.t('crud.excel.params'),
             prop: 'params',
             type: 'checkbox',
             span: 24,
@@ -117,21 +121,21 @@ export default {
               return result
             })()),
             dicData: [{
-              label: '表头',
+              label: this.t('crud.excel.paramsDic.header'),
               disabled: true,
               value: 'header'
             }, {
-              label: '数据源',
+              label: this.t('crud.excel.paramsDic.data'),
               value: 'data'
             }].concat((() => {
               let result = []
               result.push({
-                label: '复杂表头',
+                label: this.t('crud.excel.paramsDic.headers'),
                 value: 'headers',
                 disabled: !this.crud.isHeader
               })
               result.push({
-                label: '合计统计',
+                label: this.t('crud.excel.paramsDic.sum'),
                 value: 'sum',
                 disabled: !this.crud.isShowSummary
               })
@@ -143,28 +147,37 @@ export default {
       this.form.type = this.crud.selectLen == 0
     },
     getColumnOption () {
-      let result = []
       let column = this.deepClone(this.crud.columnOption)
-      column.forEach(ele => {
-        let children = ele.children
-        if (children && !Array.isArray(children)) {
-          delete ele.children
-        }
-        if (ele.showColumn !== false) result.push(ele)
-      })
-      this.columnOption = result;
-      this.form.prop = this.columnOption.map(ele => ele.prop)
+      let prop = []
+      const findProp = (list = []) => {
+        let count = [];
+        list.forEach((ele, index) => {
+          let children = ele.children
+          if (children && !Array.isArray(children)) delete ele.children
+          else if (ele.showColumn === false) count.push(index)
+          else {
+            ele.prop = ele.prop || uuid()
+            prop.push(ele.prop)
+            if (ele.children) findProp(children)
+          }
+        })
+        count.forEach(ele => list.splice(ele, 1))
+      }
+      findProp(column)
+      this.columnOption = column;
+      this.form.prop = prop
     },
     getColumn () {
       let columns = this.deepClone(this.columnOption);
+      let props = this.$refs.form.getPropRef('prop').$refs.temp.getHalfList()
       if (!this.form.params) return []
       if (this.form.params.includes('headers')) {
         const findProp = (list = []) => {
           list.forEach((ele, index) => {
-            if (ele.children) {
-              findProp(ele.children)
-            } else if (!this.form.prop.includes(ele.prop)) {
+            if (!props.includes(ele.prop)) {
               list.splice(index, 1);
+            } else if (ele.children) {
+              findProp(ele.children)
             }
           })
         }
@@ -176,7 +189,7 @@ export default {
           list.forEach((ele, index) => {
             if (ele.children) {
               findProp(ele.children)
-            } else if (this.form.prop.includes(ele.prop)) {
+            } else if (props.includes(ele.prop)) {
               result.push(ele)
             }
           })

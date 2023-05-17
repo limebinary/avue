@@ -1,6 +1,8 @@
 <template>
   <div :class="b()">
-    <el-input :size="size"
+    <el-input :prefix-icon="prefixIcon"
+              :suffix-icon="suffixIcon"
+              :size="size"
               :value="labelShow"
               :clearable="clearableVal"
               :placeholder="placeholder"
@@ -12,7 +14,7 @@
     </el-input>
     <div v-if="box">
       <el-dialog class="avue-dialog avue-dialog--none"
-                 :width="dialogWidth"
+                 :width="setPx(dialogWidth)"
                  :modal-append-to-body="$AVUE.modalAppendToBody"
                  :append-to-body="$AVUE.appendToBody"
                  :title="placeholder"
@@ -34,7 +36,7 @@
           <el-button type="primary"
                      :size="size"
                      icon="el-icon-check"
-                     @click="setVal">确 定</el-button>
+                     @click="setVal">{{t("common.submitBtn")}}</el-button>
         </span>
       </el-dialog>
     </div>
@@ -46,9 +48,10 @@
 import create from "core/create";
 import props from "common/common/props.js";
 import event from "common/common/event.js";
+import locale from "core/locale";
 export default create({
   name: "input-table",
-  mixins: [props(), event()],
+  mixins: [props(), event(), locale],
   data () {
     return {
       object: {},
@@ -62,6 +65,12 @@ export default create({
     };
   },
   props: {
+    prefixIcon: {
+      type: String
+    },
+    suffixIcon: {
+      type: String
+    },
     formatter: Function,
     onLoad: Function,
     dialogWidth: {
@@ -101,7 +110,7 @@ export default create({
       return Object.assign({
         menu: false,
         header: false,
-        size: 'mini',
+        size: this.size,
         headerAlign: 'center',
         align: 'center',
         highlightCurrentRow: true,

@@ -1,7 +1,8 @@
 import { validatenull } from './validate';
-import { DIC_PROPS, DIC_SHOW_SPLIT } from 'global/variable';
+import { DIC_PROPS, CHILDREN_LIST } from 'global/variable';
 import { typeList } from 'global/variable'
 export const isMediaType = (url, type) => {
+  if (validatenull(url)) return
   if (typeList.audio.test(url) || type == 'audio') {
     return 'audio'
   } else if (typeList.video.test(url) || type == 'video') {
@@ -9,7 +10,7 @@ export const isMediaType = (url, type) => {
   } else if (typeList.img.test(url) || type == 'img') {
     return 'img'
   }
-
+  return
 }
 export const uuid = () => {
   var s = [];
@@ -105,12 +106,6 @@ export function downFile (url, saveName) {
   }
   aLink.dispatchEvent(event);
 }
-export function strCorNum (list) {
-  list.forEach((ele, index) => {
-    list[index] = Number(ele);
-  });
-  return list;
-}
 export function extend () {
   var target = arguments[0] || {};
   var deep = false;
@@ -183,28 +178,17 @@ export function dataURLtoFile (dataurl, filename) {
   });
 }
 
-export function findObject (list, value, key = 'prop') {
-  let result = -1;
-  let type = (() => {
-    let result;
+export function findObject (list = [], value, prop = 'prop') {
+  let result
+  result = findNode(list, { value: prop }, value);
+  if (!result) {
     list.forEach(ele => {
       if (ele.column) {
-        result = 'group';
-      } else if (ele.children) {
-        result = 'tree';
+        if (!result) result = findNode(ele.column, { value: prop }, value);
+      } else if (ele.children && CHILDREN_LIST.includes(ele.type)) {
+        if (!result) result = findNode(ele.children.column, { value: prop }, value);
       }
-    });
-    return result;
-  })();
-  if (type === 'group') {
-    list.forEach(ele => {
-      const val = findArray(ele.column, value, key, true);
-      if (val !== -1) result = val;
-    });
-  } else if (type === 'tree') {
-    result = findLabelNode(list, value, { value: key }, true);
-  } else {
-    result = findArray(list, value, key, true);
+    })
   }
   return result;
 }
@@ -287,20 +271,21 @@ export const deepClone = data => {
   }
   return obj;
 };
-/**
- * 根据字段数组排序
- */
-export const sortArrys = (list, prop) => {
-  list.sort(function (a, b) {
-    if (a[prop] > b[prop]) {
-      return -1;
+
+export const getColumn = (column) => {
+  let columnList = []
+  if (Array.isArray(column)) {
+    columnList = column
+  } else {
+    for (let o in column) {
+      let columnMerge = {
+        ...column[o],
+        ...{ prop: o }
+      }
+      columnList.push(columnMerge)
     }
-    if (a[prop] < b[prop]) {
-      return 1;
-    }
-    return 0;
-  });
-  return list;
+  }
+  return columnList;
 };
 
 /**
@@ -329,58 +314,42 @@ export const detailDataType = (value, type) => {
     return value;
   }
 };
-// 获取url中的参数
-export const getUrlParams = (url) => {
-  let result = {
-    url: '',
-    params: {}
-  };
-  let list = url.split('?');
-  result.url = list[0];
-  let params = list[1];
-  if (params) {
-    let list = params.split('&');
-    list.forEach(ele => {
-      let dic = ele.split('=');
-      let label = dic[0];
-      let value = dic[1];
-      result.params[label] = value;
-    });
-  }
-  return result;
-};
 
-/**
- * 数组的数据类型转化
- */
-export const detailDic = (list = [], props = {}, type) => {
-  let valueKey = props.value || DIC_PROPS.value;
-  let childrenKey = props.children || DIC_PROPS.children;
-  list.forEach(ele => {
-    ele[valueKey] = detailDataType(ele[valueKey], type);
-    if (ele[childrenKey]) detailDic(ele[childrenKey], props, type);
-  });
-  return list;
-};
 /**
  * 根据字典的value显示label
  */
 
-export const findByValue = (dic, value, props) => {
-  // 如果为空直接返回
-  if (validatenull(dic)) return value;
-  let result = '';
-  let isArray = value instanceof Array
-  let list = isArray ? value : [value]
-  props = props || DIC_PROPS;
-  result = [];
-  for (let i = 0; i < list.length; i++) {
-    result.push(findLabelNode(dic, list[i], props) || list[i]);
-  }
+export const getDicValue = (list, value, props = {}) => {
+  let isArray = Array.isArray(value)
+  value = isArray ? value : [value]
+  let result = [];
+  let labelKey = props[DIC_PROPS.label] || DIC_PROPS.label
+  let groupsKey = props[DIC_PROPS.groups] || DIC_PROPS.groups
+  let dic = deepClone(list);
+  dic.forEach(ele => {
+    if (ele[groupsKey]) {
+      dic = dic.concat(ele[groupsKey]);
+      delete ele[groupsKey];
+    }
+  });
+  value.forEach(val => {
+    if (Array.isArray(val)) {
+      let array_result = []
+      val.forEach(array_val => {
+        let obj = findNode(dic, props, array_val) || {}
+        array_result.push(obj[labelKey] || array_val);
+      })
+      result.push(array_result);
+    } else {
+      let obj = findNode(dic, props, val) || {}
+      result.push(obj[labelKey] || val);
+    }
+  })
   if (isArray) {
-    return result.join(DIC_SHOW_SPLIT).toString();
+    return result
+  } else {
+    return result.join('')
   }
-  return result.join()
 };
 /**
  * 过滤字典翻译字段和空字段
@@ -398,73 +367,33 @@ export const filterParams = (form, list = ['', '$'], deep = true) => {
   }
   return data
 };
-/**
- * 处理存在group分组的情况
- */
-export const detailDicGroup = (dic = [], props = {}) => {
-  let list = deepClone(dic);
-  let groupsKey = props[DIC_PROPS.groups] || DIC_PROPS.groups
-  dic.forEach(ele => {
-    if (ele[groupsKey]) {
-      list = list.concat(ele[groupsKey]);
-    }
-  });
-  return list;
-};
-/**
- * 根据label去找到节点
- */
-export const findLabelNode = (dic, value, props, obj) => {
-  let result;
-  if (!obj) dic = detailDicGroup(dic, props);
-  let rev = (dic1) => {
-    const labelKey = props.label || DIC_PROPS.label;
-    const valueKey = props.value || DIC_PROPS.value;
-    const childrenKey = props.children || DIC_PROPS.children;
-    for (let i = 0; i < dic1.length; i++) {
-      const ele = dic1[i];
-      const children = ele[childrenKey] || [];
-      if (ele[valueKey] === value) {
-        result = obj ? ele : ele[labelKey];
-      } else {
-        rev(children);
-      }
-    }
-  };
-  rev(dic);
-  return result;
-};
-/**
- * 获取多层data
- */
-export const getDeepData = (res) => {
-  return (Array.isArray(res) ? res : res.data) || [];
-};
-export const getObjValue = (data, params = '', type) => {
-  const list = params.split('.');
-  let result = data;
-  if (list[0] === '' && type !== 'object') {
-    return getDeepData(data);
-  } else if (list[0] !== '') {
-    list.forEach(ele => {
-      result = result[ele];
-    });
-  }
-  return result;
-};
+
 
 /**
  * 根据值查找对应的序号
  */
-export const findArray = (dic, value, valueKey, obj) => {
-  valueKey = valueKey || DIC_PROPS.value;
-  for (let i = 0; i < dic.length; i++) {
-    if (dic[i][valueKey] === value) {
-      return obj ? dic[i] : i;
+export const findArray = (list = [], value, valueKey = DIC_PROPS.value, index = false) => {
+  let node;
+  if (index) {
+    node = list.findIndex(ele => ele[valueKey] == value)
+  } else {
+    node = list.find(ele => ele[valueKey] == value)
+  }
+  return node
+};
+export const findNode = (list = [], props = {}, value) => {
+  let valueKey = props.value || DIC_PROPS.value;
+  let childrenKey = props.children || DIC_PROPS.children;
+  for (let i = 0; i < list.length; i++) {
+    const ele = list[i]
+    if (ele[valueKey] == value) {
+      return ele
+    } else if (ele[childrenKey] && Array.isArray(ele[childrenKey])) {
+      let node = findNode(ele[childrenKey], props, value)
+      if (node) return node
     }
   }
-  return -1;
-};
+}
 /**
  * 根据位数获取*密码程度
  */
@@ -480,9 +409,9 @@ export const getPasswordChar = (result = '', char) => {
 export const arraySort = (list = [], prop, callback) => {
   return list.filter(ele => !validatenull(ele[prop])).sort((a, b) => callback(a, b)).concat(list.filter(ele => validatenull(ele[prop])));
 }
-export const clearVal = (obj, list = []) => {
+export const clearVal = (obj, propList, list = []) => {
   if (!obj) return {};
-  Object.keys(obj).forEach(ele => {
+  propList.forEach(ele => {
     if (list.includes(ele)) return
     else if (ele.includes('$')) delete obj[ele]
     else if (!validatenull(obj[ele])) {

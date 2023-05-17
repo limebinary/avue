@@ -8,8 +8,9 @@
              :label-suffix="labelSuffix"
              :size="$AVUE.formSize || controlSize"
              :label-position="parentOption.labelPosition"
-             :label-width="setPx(parentOption.labelWidth,labelWidth)">
+             :label-width="setPx(parentOption.labelWidth,config.labelWidth)">
       <el-row :span="24"
+              :gutter="parentOption.gutter"
               :class="{'avue-form__tabs':isTabs}">
         <avue-group v-for="(item,index) in columnOption"
                     @change="handleGroupClick"
@@ -55,21 +56,20 @@
             <template v-for="(column,cindex) in item.column">
               <el-col v-if="vaildDisplay(column)"
                       :key="cindex"
-                      :style="{paddingLeft:gutter,paddingRight:gutter}"
-                      :span="getSpan(column)"
-                      :md="getSpan(column)"
-                      :sm="column.smSpan || item.smSpan || 12"
-                      :xs="column.xsSpan || item.xmSpan ||  24"
-                      :offset="column.offset || item.offset"
-                      :push="column.push || item.push"
-                      :pull="column.pull || item.pull"
+                      :span="getItemParams(column,item,'span')"
+                      :md="getItemParams(column,item,'span')"
+                      :sm="getItemParams(column,item,'span')"
+                      :xs="getItemParams(column,item,'xsSpan')"
+                      :offset="getItemParams(column,item,'offset')"
+                      :push="getItemParams(column,item,'push')"
+                      :pull="getItemParams(column,item,'pull')"
                       :class="[b('row'),{'avue--detail avue--detail__column':vaildDetail(column)},column.className]">
                 <el-form-item :prop="column.prop"
                               :label="column.label"
                               :rules="column.rules"
                               :class="b('item--'+(column.labelPosition || item.labelPosition || ''))"
                               :label-position="column.labelPosition || item.labelPosition || parentOption.labelPosition"
-                              :label-width="getLabelWidth(column,item)">
+                              :label-width="getItemParams(column,item,'labelWidth',true)">
                   <template slot="label"
                             v-if="getSlotName(column,'L',$scopedSlots)">
                     <slot :name="getSlotName(column,'L')"
@@ -119,6 +119,7 @@
                           v-if="$scopedSlots[column.prop]"></slot>
                     <form-temp :column="column"
                                v-else
+                               :box-type="boxType"
                                :ref="column.prop"
                                :dic="DIC[column.prop]"
                                :props="parentOption.props"
@@ -127,7 +128,7 @@
                                :disabled="getDisabled(column)"
                                :readonly="column.readonly || readonly"
                                :enter="parentOption.enter"
-                               :size="parentOption.size"
+                               :size="size"
                                v-model="form[column.prop]"
                                @enter="submit"
                                :column-slot="columnSlot"
@@ -182,9 +183,10 @@ import formTemp from 'common/components/form/index'
 import { DIC_PROPS } from 'global/variable';
 import { getComponent, getPlaceholder, formInitVal, calcCount, calcCascader } from "core/dataformat";
 import { sendDic } from "core/dic";
-import { filterParams, clearVal, getAsVal, setAsVal } from 'utils/util'
+import { getColumn, filterParams, clearVal, getAsVal, setAsVal } from 'utils/util'
 import mock from "utils/mock";
 import formMenu from './menu'
+import config from "./config.js";
 export default create({
   name: "form",
   mixins: [init()],
@@ -217,13 +219,10 @@ export default create({
   },
   data () {
     return {
+      config: config,
       activeName: '',
-      labelWidth: 90,
       allDisabled: false,
-      optionIndex: [],
-      optionBox: false,
       tableOption: {},
-      itemSpanDefault: 12,
       form: {},
       formCreate: false,
       formList: [],
@@ -299,9 +298,6 @@ export default create({
     isView () {
       return this.boxType === "view"
     },
-    gutter () {
-      return this.setPx((this.parentOption.gutter || 10) / 2)
-    },
     detail () {
       return this.parentOption.detail
     },
@@ -341,9 +337,10 @@ export default create({
       return this.tableOption || {};
     },
     columnOption () {
-      let column = this.tableOption.column || []
-      let group = this.deepClone(this.tableOption.group) || [];
-      let footer = this.tableOption.footer || [];
+      let tableOption = this.deepClone(this.tableOption)
+      let column = getColumn(tableOption.column)
+      let group = tableOption.group || [];
+      let footer = tableOption.footer || [];
       group.unshift({
         header: false,
         column: column
@@ -355,12 +352,12 @@ export default create({
         })
       }
       group.forEach((ele, index) => {
-        ele.column = ele.column || [];
+        ele.column = getColumn(ele.column)
         // 循环列的全部属性
         ele.column.forEach((column, cindex) => {
           //动态计算列的位置，如果为隐藏状态则或则手机状态不计算
           if (column.display !== false && !this.isMobile) {
-            column = calcCount(column, this.itemSpanDefault, cindex === 0);
+            column = calcCount(column, this.config.span, cindex === 0);
           }
         });
         //处理级联属性
@@ -394,7 +391,6 @@ export default create({
     setTimeout(() => {
       this.dataFormat()
     })
-
   },
   methods: {
     getComponent,
@@ -402,15 +398,72 @@ export default create({
     getDisabled (column) {
       return this.vaildDetail(column) || this.isDetail || this.vaildDisabled(column) || this.allDisabled
     },
-    getSpan (column) {
-      return column.span || this.parentOption.span || this.itemSpanDefault
-    },
     isGroupShow (item, index) {
       if (this.isTabs) {
         return index == this.activeName || index == 0
       } else {
         return true;
       }
+    },
+    //初始化表单
+    dataFormat () {
+      let formDefault = formInitVal(this.propOption).tableForm;
+      let formValue = this.value
+      let form = {}
+      Object.entries(Object.assign(formDefault, formValue)).forEach(ele => {
+        let key = ele[0], value = ele[1]
+        if (this.validatenull(formValue[key])) {
+          form[key] = value
+        } else {
+          form[key] = formValue[key]
+        }
+      })
+      this.$set(this, 'form', form)
+      this.setLabel()
+      this.setControl()
+      this.setVal()
+      setTimeout(() => {
+        this.formCreate = true
+        this.clearValidate()
+      })
+    },
+    setControl () {
+      this.propOption.forEach(column => {
+        let prop = column.prop
+        let bind = column.bind
+        let control = column.control
+        let value = this.form
+        if (!this.formBind[prop]) {
+          let bindList = [];
+          if (bind) {
+            let formProp = this.$watch('form.' + prop, (n, o) => {
+              if (n != o) setAsVal(this.form, bind, n);
+            })
+            let formDeep = this.$watch('form.' + bind, (n, o) => {
+              if (n != o) this.$set(this.form, prop, n);
+            })
+            bindList.push(formProp)
+            bindList.push(formDeep)
+            this.$set(this.form, prop, getAsVal(this.form, bind));
+          }
+          if (control) {
+            const callback = () => {
+              let controlList = control(this.form[column.prop], this.form) || {};
+              Object.keys(controlList).forEach(item => {
+                let ele = Object.assign(this.objectOption[item] || {}, controlList[item])
+                this.$set(this.objectOption, item, ele)
+                if (controlList[item].dicData) this.DIC[item] = controlList[item].dicData
+              })
+            }
+            let formControl = this.$watch('form.' + prop, (n, o) => {
+              callback()
+            })
+            bindList.push(formControl)
+            callback()
+          }
+          this.formBind[prop] = bindList;
+        }
+      })
     },
     setForm () {
       Object.keys(this.value).forEach(ele => {
@@ -427,19 +480,19 @@ export default create({
       }
       if (this.tableOption.filterDic == true) {
         this.form = filterParams(this.form, ['$'], false)
-        return
+      } else {
+        this.propOption.forEach(column => {
+          let result;
+          let DIC = this.DIC[column.prop]
+          if (this.validatenull(DIC)) return
+          result = detail(this.form, column, this.tableOption, DIC);
+          if (result) {
+            this.$set(this.form, `$${column.prop}`, result);
+          } else {
+            this.$delete(this.form, `$${column.prop}`)
+          }
+        });
       }
-      this.propOption.forEach(column => {
-        let result;
-        let DIC = this.DIC[column.prop]
-        if (this.validatenull(DIC)) return
-        result = detail(this.form, column, this.tableOption, DIC);
-        if (result) {
-          this.$set(this.form, `$${column.prop}`, result);
-        } else {
-          this.$delete(this.form, `$${column.prop}`)
-        }
-      });
     },
     handleGroupClick (activeNames) {
       this.$emit('tab-click', activeNames)
@@ -447,16 +500,17 @@ export default create({
     handleTabClick (tab, event) {
       this.$emit('tab-click', tab, event)
     },
-    getLabelWidth (column, item) {
+    getItemParams (column, item, type, isPx) {
       let result;
-      if (!this.validatenull(column.labelWidth)) {
-        result = column.labelWidth
-      } else if (!this.validatenull(item.labelWidth)) {
-        result = item.labelWidth
+      if (!this.validatenull(column[type])) {
+        result = column[type]
+      } else if (!this.validatenull(item[type])) {
+        result = item[type]
       } else {
-        result = this.parentOption.labelWidth;
+        result = this.parentOption[type];
       }
-      return this.setPx(result, this.labelWidth);
+      result = this.vaildData(result, this.config[type])
+      return isPx ? this.setPx(result) : result
     },
     //对部分表单字段进行校验的方法
     validateField (val) {
@@ -467,60 +521,6 @@ export default create({
     },
     getPropRef (prop) {
       return this.$refs[prop][0];
-    },
-    //初始化表单
-    dataFormat () {
-      let formDefault = formInitVal(this.propOption).tableForm;
-      let form = {}
-      Object.entries(Object.assign(formDefault, this.value)).forEach(ele => {
-        let key = ele[0], value = ele[1]
-        if (this.validatenull(this.value[key])) {
-          form[key] = value
-        } else {
-          form[key] = this.value[key]
-        }
-      })
-      this.$set(this, 'form', form)
-      this.setControl()
-      this.$emit('input', this.form)
-      setTimeout(() => {
-        this.formCreate = true
-        this.clearValidate()
-      })
-    },
-    setControl () {
-      this.propOption.forEach(column => {
-        let prop = column.prop
-        let bind = column.bind
-        let control = column.control
-        let value = this.form
-        if (!this.formBind[prop]) {
-          if (bind) {
-            this.$watch('form.' + prop, (n, o) => {
-              if (n != o) setAsVal(this.form, bind, n);
-            })
-            this.$watch('form.' + bind, (n, o) => {
-              if (n != o) this.$set(this.form, prop, n);
-            })
-            this.$set(this.form, prop, eval('value.' + bind));
-          }
-          if (control) {
-            const callback = () => {
-              let controlList = control(this.form[column.prop], this.form) || {};
-              Object.keys(controlList).forEach(item => {
-                let ele = Object.assign(this.objectOption[item] || {}, controlList[item])
-                this.$set(this.objectOption, item, ele)
-                if (controlList[item].dicData) this.DIC[item] = controlList[item].dicData
-              })
-            }
-            this.$watch('form.' + prop, (n, o) => {
-              callback()
-            })
-            callback()
-          }
-          this.formBind[prop] = true;
-        }
-      })
     },
     handleChange (list, column) {
       this.$nextTick(() => {
@@ -604,8 +604,8 @@ export default create({
       } else if (this.isView) {
         return false;
       }
-      if (key) return this.vaildData(column[key], false)
-      return false;
+      return this.vaildData(column[key], false)
+
     },
     // 验证表单是否禁止
     vaildDisabled (column) {
@@ -620,9 +620,7 @@ export default create({
       } else if (this.isView) {
         return true;
       }
-      if (key) return this.vaildData(column[key], false)
-      return false;
-
+      return this.vaildData(column[key], false)
     },
     // 验证表单是否显隐
     vaildDisplay (column) {
@@ -636,8 +634,8 @@ export default create({
       } else if (this.isView) {
         key = 'viewDisplay'
       }
-      if (key) return this.vaildData(column[key], true)
-      return true;
+      return this.vaildData(column[key], true)
+
     },
     clearValidate (list) {
       this.$refs.form.clearValidate(list);
@@ -685,8 +683,11 @@ export default create({
         })
       });
     },
-    resetForm () {
-      this.form = clearVal(this.form, (this.tableOption.filterParams || []).concat([this.rowKey]))
+    resetForm (reset = true) {
+      if (reset) {
+        let propList = this.propOption.map(ele => ele.prop)
+        this.form = clearVal(this.form, propList, (this.tableOption.filterParams || []).concat([this.rowKey]))
+      }
       this.$nextTick(() => {
         this.clearValidate()
         this.$emit("reset-change");
@@ -704,12 +705,19 @@ export default create({
     submit () {
       this.validate((valid, msg) => {
         if (valid) {
-          this.$emit("submit", filterParams(this.form), this.hide);
+          this.$emit("submit", filterParams(this.form, ['$']), this.hide);
         } else {
           this.$emit("error", msg);
         }
       });
     }
+  },
+  beforeDestroy () {
+    Object.keys(this.formBind).forEach(ele => {
+      this.formBind[ele].forEach(unWatch => {
+        unWatch()
+      })
+    })
   }
 });
 </script>

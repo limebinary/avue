@@ -51,7 +51,7 @@
             :class="'avue-dialog__footer--'+dialogMenuPosition">
         <el-button v-if="vaildData(option.submitBtn,true) && !isView"
                    @click="submit"
-                   :disabled="disabled"
+                   :loading="disabled"
                    :size="crud.controlSize"
                    :icon="option.submitIcon"
                    type="primary">{{option.submitText}}</el-button>
@@ -157,10 +157,10 @@ export default create({
     params () {
       return this.isDrawer ?
         {
-          size: this.fullscreen ? '100%' : this.width,
+          size: this.fullscreen ? '100%' : this.setPx(this.width),
           direction: this.crud.tableOption.dialogDirection
         } : {
-          width: this.width,
+          width: this.setPx(this.width),
           fullscreen: this.fullscreen
         };
     },
@@ -179,7 +179,7 @@ export default create({
       this.$refs.tableForm.submit()
     },
     reset () {
-      this.$refs.tableForm.resetForm()
+      this.$refs.tableForm.resetForm(false)
     },
     getSlotName (item) {
       return item.replace('Form', '')
@@ -190,8 +190,7 @@ export default create({
       })
     },
     handleChange () {
-      this.crud.$emit('input', this.crud.tableForm)
-      this.crud.$emit('change', this.crud.tableForm)
+      this.crud.setVal()
     },
     handleTabClick (tab, event) {
       this.crud.$emit('tab-click', tab, event)
@@ -224,7 +223,7 @@ export default create({
     rowSave (hide) {
       this.crud.$emit(
         "row-save",
-        filterParams(this.crud.tableForm),
+        filterParams(this.crud.tableForm, ['$']),
         this.closeDialog,
         hide
       );
@@ -233,7 +232,7 @@ export default create({
     rowUpdate (hide) {
       this.crud.$emit(
         "row-update",
-        filterParams(this.crud.tableForm),
+        filterParams(this.crud.tableForm, ['$']),
         this.crud.tableIndex,
         this.closeDialog,
         hide
@@ -245,7 +244,9 @@ export default create({
         if (this.isEdit) {
           let { parentList, index } = this.crud.findData(row[this.crud.rowKey])
           if (parentList) {
-            parentList.splice(index, 1, row);
+            const oldRow = parentList.splice(index, 1)[0];
+            row[this.crud.childrenKey] = oldRow[this.crud.childrenKey]
+            parentList.splice(index, 0, row)
           }
         } else if (this.isAdd) {
           let { item } = this.crud.findData(row[this.crud.rowParentKey])
@@ -270,10 +271,9 @@ export default create({
       const callback = () => {
         done && done();
         this.crud.tableIndex = -1;
+        this.crud.tableForm = {}
+        this.crud.setVal()
         this.boxVisible = false;
-        Object.keys(this.crud.tableForm).forEach(ele => {
-          this.$delete(this.crud.tableForm, ele);
-        })
       };
       if (typeof this.crud.beforeClose === "function") {
         this.crud.beforeClose(callback, this.boxType);

@@ -1,9 +1,11 @@
 import { initVal } from 'core/dataformat';
+import { findNode } from 'utils/util'
 export default function () {
   return {
     methods: {
       bindEvent (name, params) {
-        params = Object.assign(params, { column: this.column }, this.tableData)
+        let item = findNode(this.dic, this.props, this.text)
+        params = Object.assign(params, { column: this.column, dic: this.dic, item }, this.tableData)
         if (typeof this[name] === 'function') {
           if (name == 'change') {
             if (this.column.cell != true) {
@@ -17,7 +19,7 @@ export default function () {
       },
       initVal () {
         this.stringMode = typeof (this.value) == 'string'
-        this.text = initVal(this.value, this.column);
+        this.text = initVal(this.value, this);
       },
       getLabelText (item) {
         if (this.validatenull(item)) return ''
